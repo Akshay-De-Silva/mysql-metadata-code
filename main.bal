@@ -64,6 +64,7 @@ isolated function getTableInfo(string tableName, ColumnRetrievalOptions include 
                 columns.push(result.toString());
             };
         check colResults.close();
+
         io:println("Column Metadata:\n");
         foreach string column in columns {
             io:println(column);
@@ -82,6 +83,7 @@ isolated function getTableInfo(string tableName, ColumnRetrievalOptions include 
                     checkConstraints.push(result.toString());
                 };
             check checkResults.close();
+
             io:println("Check Constraints Metadata:\n");
             foreach string 'check in checkConstraints {
                 io:println('check);
@@ -99,6 +101,7 @@ isolated function getTableInfo(string tableName, ColumnRetrievalOptions include 
                     refConstraints.push(result.toString());
                 };
             check refResults.close();
+
             io:println("Referential Constraints Metadata:\n");
             foreach string ref in refConstraints {
                 io:println(ref);
@@ -133,15 +136,46 @@ isolated function listRoutines() returns string[]|error {
     return routines;
 }
 
+isolated function getRoutineInfo(string name) returns RoutineDefinition|error {
+    string[] parameters = [];
+
+    RoutineDefinition|error routine = dbClient->queryRow(
+        `SELECT * FROM information_schema.routines where routine_name = ${name};`
+    );
+
+    stream<ParameterDefinition, error?> paramResults = dbClient->query(
+        `SELECT * FROM information_schema.parameters 
+         WHERE (specific_name=${name});`           
+    );
+        check from ParameterDefinition 'parameter in paramResults
+        do {
+            parameters.push('parameter.toString());
+        };
+    check paramResults.close();
+
+    io:println("Parameter Metadata:\n");
+    foreach string 'parameter in parameters {
+        io:println('parameter);
+        io:println("\n");
+    }
+    io:println("\n\n");
+
+    return routine;
+}
+
 public function main() {
-    string[]|error tableNames = listTables();
-    io:println(tableNames);
+    //string[]|error tableNames = listTables();
+    //io:println(tableNames);
 
     // TableDefinition|error t = getTableInfo("Employees", include = COLUMNS_WITH_CONSTRAINTS);
     // io:println("Table Definition:\n");
     // io:println(t);
 
-    string[]|error routineNames = listRoutines();
-    io:println(routineNames);
+    //string[]|error routineNames = listRoutines();
+    //io:println(routineNames);
+
+    RoutineDefinition|error r = getRoutineInfo("GetEmployeeByFirstName");
+    io:println("Routine Definition:\n");
+    io:println(r);
 }
 

@@ -110,15 +110,43 @@ public type CheckConstraint record {
 
 # Represents a routine.
 # 
-# + name - The name of the routine
-# + 'type - The type of the routine (procedure or function)
-# + returnType - If the routine returns a value, the return data-type. Else ()
+# + routine_name - The name of the routine
+# + routine_type - The type of the routine (procedure or function)
+# + data_type - If the routine returns a value, the return data-type. Else ()
 # + parameters - The parameters associated with the routine
 public type RoutineDefinition record {
-    string name;
-    RoutineType 'type;
-    string? returnType;
+    string routine_name;
+    string routine_type;                //error if using enum
+    string? data_type;
     ParameterDefinition[] parameters;
+    string specific_name?;
+    string routine_catalog;
+    string routine_schema;
+    int? character_maximum_length?;
+    int? character_octet_length?;
+    int? numeric_precision?;            //unsure of datatype
+    int? numeric_scale?;                //unsure of datatype
+    int? datetime_precision;            //unsure of datatype
+    string? character_set_name?;        //unsure of datatype
+    string? collation_name?;            //unsure of datatype
+    string? dtd_identifier?;
+    string routine_body?;
+    string? routine_definition?;
+    string? external_name?;
+    string? external_language?;
+    string parameter_style?;
+    string is_deterministic?;
+    string sql_data_access?;
+    string? sql_path?;
+    string? security_type?;
+    string? created?;
+    string? last_altered?;
+    string? sql_mode?;
+    string? routine_comment?;
+    string? definer?;
+    string? character_set_client?;
+    string? collation_connection?;
+    string? database_collation?;
 };
 
 public enum RoutineType {
@@ -128,13 +156,26 @@ public enum RoutineType {
 
 # Represents a routine parameter.
 # 
-# + mode - The mode of the parameter (IN, OUT, INOUT)
-# + name - The name of the parameter
-# + 'type - The data-type of the parameter
+# + parameter_mode - The mode of the parameter (IN, OUT, INOUT)
+# + parameter_name - The name of the parameter
+# + data_type - The data-type of the parameter
 public type ParameterDefinition record {
-    ParameterMode mode;
-    string name;
-    string 'type;
+    string? parameter_mode;             //error if using enum
+    string? parameter_name;
+    string? data_type;
+    string specific_catalog;
+    string specific_schema;
+    string specific_name?;
+    int? ordinal_position?;
+    int? character_maximum_length?;
+    int? character_octet_length?;
+    int? numeric_precision?;            //unsure of datatype
+    int? numeric_scale?;                //unsure of datatype
+    int? datetime_precision;            //unsure of datatype
+    string? character_set_name?;        //unsure of datatype
+    string? collation_name?;            //unsure of datatype
+    string? dtd_identifier?;
+    string? routine_type?;
 };
 
 public enum ParameterMode {
