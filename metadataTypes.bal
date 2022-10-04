@@ -1,7 +1,7 @@
-public type Entity record { //make inline
-    string table_name?;
-    string routine_name?;
-};
+// public type Entity record { //make inline
+//     string table_name?;
+//     string routine_name?;
+// };
 
 # Represents a table in the database.
 #
