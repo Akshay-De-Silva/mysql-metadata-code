@@ -15,18 +15,18 @@ isolated client class MockSchemaClient {
     //*SchemaClient;                        <-uncomment when adding to main code repo
 
     private final mysql:Client dbClient;
-    private final string DATABASE;
+    private final string database;
 
-    public function init(string HOST, string USER, string PASSWORD, string DATABASE) returns sql:Error? {
-        self.DATABASE = DATABASE;
-        self.dbClient = check new (HOST, USER, PASSWORD);
+    public function init(string host, string user, string password, string database) returns sql:Error? {
+        self.database = database;
+        self.dbClient = check new (host, user, password);
     }
 
     isolated remote function listTables() returns string[]|sql:Error {
         string[] tables = [];
         stream<record {|string table_name;|}, sql:Error?> results = self.dbClient->query(
             `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
-            WHERE TABLE_SCHEMA = ${DATABASE};`
+            WHERE TABLE_SCHEMA = ${self.database};`
         );
 
         do {
@@ -48,10 +48,10 @@ isolated client class MockSchemaClient {
         return tables;
     }
 
-    isolated remote function getTableInfo(string tableName, sql:ColumnRetrievalOptions include = sql:COLUMNS_ONLY) returns TableDefinition|sql:Error { //return as sql:TableDefinition
-        record {}|sql:Error 'table = self.dbClient->queryRow(
-            `SELECT table_type FROM information_schema.tables 
-             WHERE (table_schema=${DATABASE} and table_name = ${tableName});`
+    isolated remote function getTableInfo(string tableName, sql:ColumnRetrievalOptions include = sql:COLUMNS_ONLY) returns sql:TableDefinition|sql:Error { //return as sql:TableDefinition
+        record {} 'table = check self.dbClient->queryRow(
+            `SELECT TABLE_TYPE FROM information_schema.tables 
+             WHERE (table_schema=${self.database} and table_name = ${tableName});`
         );
 
         TableDefinition data = {
@@ -62,8 +62,8 @@ isolated client class MockSchemaClient {
         if !(include == sql:NO_COLUMNS) {
             ColumnDefinition[] columns = [];
             stream<ColumnDefinition, sql:Error?> colResults = self.dbClient->query(
-                `SELECT * FROM information_schema.columns 
-                 WHERE (table_schema=${DATABASE} and table_name = ${tableName});`
+                `SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT, IS_NULLABLE FROM information_schema.columns 
+                 WHERE (table_schema=${self.database} and table_name = ${tableName});`
             );
             do {
                 check from ColumnDefinition result in colResults
@@ -71,17 +71,18 @@ isolated client class MockSchemaClient {
                         columns.push(result);
                     };
             } on fail error e {
-                return error("Parsing Failed", cause = e);
+                return error("Error - recieved sql data is of type SQL:Error", cause = e);
             }
             check colResults.close();
 
             data.columns = columns;
 
-            if include == sql:COLUMNS_WITH_CONSTRAINTS {
+            if include == sql:COLUMNS_WITH_CONSTRAINTS {                                                //NEED TO ADD ERROR CHECKING LIKE EXAMPLE
                 CheckConstraint[] checkConst = [];
+                map<CheckConstraint[]> checkConstMap = {};
                 stream<CheckConstraint, sql:Error?> checkResults = self.dbClient->query(
-                    `SELECT * FROM information_schema.check_constraints 
-                     WHERE constraint_schema = ${DATABASE};`
+                    `SELECT CONSTRAINT_NAME, CHECK_CLAUSE FROM information_schema.check_constraints 
+                     WHERE constraint_schema = ${self.database};`
                 );
                 do {
                     check from CheckConstraint result in checkResults
@@ -89,14 +90,14 @@ isolated client class MockSchemaClient {
                             checkConst.push(result);
                         };
                 } on fail error e {
-                    return error("Parsing Failed", cause = e);
+                    return error("Error - recieved sql data is of type SQL:Error", cause = e);
                 }
                 check checkResults.close();
 
                 ReferentialConstraint[] refConst = [];
                 stream<ReferentialConstraint, sql:Error?> refResults = self.dbClient->query(
                     `SELECT * FROM information_schema.referential_constraints 
-                        WHERE constraint_schema = ${DATABASE};`
+                        WHERE constraint_schema = ${self.database};`
                 );
                 do {
                     check from ReferentialConstraint result in refResults
@@ -104,35 +105,28 @@ isolated client class MockSchemaClient {
                             refConst.push(result);
                         };
                 } on fail error e {
-                    return error("Parsing Failed", cause = e);
+                    return error sql:Error("Error - recieved sql data is of type SQL:Error", cause = e);
                 }
                 check refResults.close();
 
-                _ = checkpanic from ColumnDefinition column in <ColumnDefinition[]>data.columns
-
-                    do {
-                        ReferentialConstraint[]? refConstraints = refConst[column.column_name];
-                        if !(refConstraints is ()) && refConstraints.length() != 0 {
-                            column.referentialConstraints = refConstraints;
-                        }
-
-                        CheckConstraint[]? checkConstraints = checkConst[column.column_name];
-                        if !(checkConstraints is ()) && checkConstraints.length() != 0 {
-                            column.checkConstraints = checkConstraints;
-                        }
-                    };
+                //map<ReferentialConstraint[]> refConstraintsMap = {};
             }
         }
 
-        sql:TableDefinition sqlData = data;
-        return data;
+        sql:TableDefinition sqlData = {name: data.table_name, 'type: <TableType>data.table_type};
+
+        if data.columns is ColumnDefinition[] {
+            sqlData.columns = <sql:ColumnDefinition[]>data.columns; 
+        }
+        
+        return sqlData;
     }
 
     isolated remote function listRoutines() returns string[]|sql:Error {
         string[] routines = [];
         stream<record {|string routine_name;|}, sql:Error?> results = self.dbClient->query(
             `SELECT * FROM information_schema.routines 
-            WHERE routine_schema = ${DATABASE};`
+            WHERE routine_schema = ${self.database};`
         );
         do {
             check from record {|string routine_name;|} result in results
@@ -180,9 +174,11 @@ isolated client class MockSchemaClient {
     }
 }
 
-public function main() {
+public function main() returns sql:Error?|error {
 
-    // MockSchemaClient ("HOST", "USER", "PASSWORD", "DATABASE");
+    MockSchemaClient client1 = check new (HOST, USER, PASSWORD, DATABASE);
+
+    //string[] listTablesResult = check client1 -> listTables();
 
     //string[]|error tableNames = listTables();
     //io:println(tableNames);
