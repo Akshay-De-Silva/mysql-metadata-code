@@ -44,7 +44,6 @@ isolated client class MockSchemaClient {
             return error("Closing Failed", cause = e);
         }
 
-        io:println("Tables Names:"); //remove later
         return tables;
     }
 
@@ -54,19 +53,19 @@ isolated client class MockSchemaClient {
              WHERE (table_schema=${self.database} and table_name = ${tableName});`
         );
 
-        TableDefinition data = {
-            table_name: tableName,
-            table_type: <TableType>'table["TABLE_TYPE"]
+        sql:TableDefinition tableDef = {
+            name: tableName,
+            'type: <TableType>'table["TABLE_TYPE"]
         };
 
         if !(include == sql:NO_COLUMNS) {
-            ColumnDefinition[] columns = [];
-            stream<ColumnDefinition, sql:Error?> colResults = self.dbClient->query(
-                `SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT, IS_NULLABLE FROM information_schema.columns 
+            sql:ColumnDefinition[] columns = [];
+            stream<sql:ColumnDefinition, sql:Error?> colResults = self.dbClient->query(
+                `SELECT COLUMN_NAME AS name, DATA_TYPE AS type, COLUMN_DEFAULT AS defaultValue, IS_NULLABLE AS nullable FROM information_schema.columns 
                  WHERE (table_schema=${self.database} and table_name = ${tableName});`
             );
             do {
-                check from ColumnDefinition result in colResults
+                check from sql:ColumnDefinition result in colResults
                     do {
                         columns.push(result);
                     };
@@ -75,17 +74,19 @@ isolated client class MockSchemaClient {
             }
             check colResults.close();
 
-            data.columns = columns;
+            //io:println(columns);
+
+            tableDef.columns = columns;
 
             if include == sql:COLUMNS_WITH_CONSTRAINTS {                                                //NEED TO ADD ERROR CHECKING LIKE EXAMPLE
-                CheckConstraint[] checkConst = [];
-                map<CheckConstraint[]> checkConstMap = {};
-                stream<CheckConstraint, sql:Error?> checkResults = self.dbClient->query(
-                    `SELECT CONSTRAINT_NAME, CHECK_CLAUSE FROM information_schema.check_constraints 
-                     WHERE constraint_schema = ${self.database};`
+                sql:CheckConstraint[] checkConst = [];
+                map<sql:CheckConstraint[]> checkConstMap = {};
+                stream<sql:CheckConstraint, sql:Error?> checkResults = self.dbClient->query(
+                    `SELECT CONSTRAINT_NAME AS name, CHECK_CLAUSE AS clause FROM information_schema.check_constraints 
+                     WHERE (CONSTRAINT_SCHEMA=${self.database} and TABLE_NAME = ${tableName});`                                     //CHECK IF WORK
                 );
                 do {
-                    check from CheckConstraint result in checkResults
+                    check from sql:CheckConstraint result in checkResults
                         do {
                             checkConst.push(result);
                         };
@@ -94,13 +95,14 @@ isolated client class MockSchemaClient {
                 }
                 check checkResults.close();
 
-                ReferentialConstraint[] refConst = [];
-                stream<ReferentialConstraint, sql:Error?> refResults = self.dbClient->query(
-                    `SELECT * FROM information_schema.referential_constraints 
-                        WHERE constraint_schema = ${self.database};`
+                sql:ReferentialConstraint[] refConst = [];
+                stream<sql:ReferentialConstraint, sql:Error?> refResults = self.dbClient->query(
+                    `SELECT CONSTRAINT_NAME AS name, TABLE_NAME AS tableName, COLUMN_NAME AS columnName, UPDATE_RULE AS updateRule, DELETE_RULE AS deleteRule 
+                     FROM information_schema.referential_constraints 
+                     WHERE (CONSTRAINT_SCHEMA=${self.database} and TABLE_NAME = ${tableName});`                                                                  //may not work (no native column_name)
                 );
                 do {
-                    check from ReferentialConstraint result in refResults
+                    check from sql:ReferentialConstraint result in refResults
                         do {
                             refConst.push(result);
                         };
@@ -113,13 +115,15 @@ isolated client class MockSchemaClient {
             }
         }
 
-        sql:TableDefinition sqlData = {name: data.table_name, 'type: <TableType>data.table_type};
+        //sql:TableDefinition sqlData = {name: data.table_name, 'type: <TableType>data.table_type};
 
-        if data.columns is ColumnDefinition[] {
-            sqlData.columns = <sql:ColumnDefinition[]>data.columns; 
-        }
+        // if data.columns is ColumnDefinition[] {
+        //     sqlData.columns = <sql:ColumnDefinition[]>data.columns; 
+        // }
+
+        //sqlData.columns = data.columns is ColumnDefinition[] ? <sql:ColumnDefinition[]>data.columns : ;       CANT USE TERNARY OPERATOR BECAUSE DONT HAVE ELSE
         
-        return sqlData;
+        return tableDef;
     }
 
     isolated remote function listRoutines() returns string[]|sql:Error {
@@ -178,14 +182,14 @@ public function main() returns sql:Error?|error {
 
     MockSchemaClient client1 = check new (HOST, USER, PASSWORD, DATABASE);
 
-    //string[] listTablesResult = check client1 -> listTables();
+    // string[]|error tableNames = client1 -> listTables();
+    // io:println("Table Names:\n");
+    // io:println(tableNames);
+    // io:println("");
 
-    //string[]|error tableNames = listTables();
-    //io:println(tableNames);
-
-    // TableDefinition|error t = getTableInfo("Employees", include = COLUMNS_WITH_CONSTRAINTS);
-    // io:println("Table Definition:\n");
-    // io:println(t);
+    sql:TableDefinition|sql:Error tableDef = client1 -> getTableInfo("employees", include = COLUMNS_WITH_CONSTRAINTS);
+    io:println("Table Definition:\n");
+    io:println(tableDef);
 
     //string[]|error routineNames = listRoutines();
     //io:println(routineNames);

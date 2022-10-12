@@ -31,6 +31,11 @@ type ColumnDefinition record {
     CheckConstraint[] checkConstraints?;
 };
 
+// public enum nullableBool { //can be imported from sql module         CANT USE
+//     TRUE = "YES",
+//     FALSE = "NO"
+// }
+
 public enum ColumnRetrievalOptions { //can be imported from sql module
     NO_COLUMNS,
     COLUMNS_ONLY,
