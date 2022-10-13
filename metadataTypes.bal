@@ -10,7 +10,7 @@ type TableDefinition record {
 };
 
 public enum TableType {
-    BASE_TABLE = "BASE TABLE",             //needs space?
+    BASE_TABLE = "BASE TABLE",            
     VIEW
 }
 
@@ -25,7 +25,7 @@ public enum TableType {
 type ColumnDefinition record {
     string name;
     string 'type;
-    anydata? defaultValue;
+    string? defaultValue;
     boolean nullable;
     ReferentialConstraint[] referentialConstraints?;
     CheckConstraint[] checkConstraints?;
@@ -53,17 +53,17 @@ type ReferentialConstraint record {
     string name;
     string tableName;
     string columnName;
-    ReferentialRule updateRule;
+    ReferentialRule updateRule;              //SHOULD BE ENUM
     ReferentialRule deleteRule;          
 };
 
 public enum ReferentialRule {
-    NO_ACTION = "NO ACTION",                              //need space?
-    RESTRICT,
-    CASCADE,
+    NO_ACTION = "NO ACTION",
+    RESTRICT = "RESTRICT",
+    CASCADE = "CASCADE",
     SET_NULL = "SET NULL",
     SET_DEFAULT = "SET DEFAULT",
-    VIEW
+    VIEW = "VIEW"
 }
 
 # Represents a check constraint.
