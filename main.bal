@@ -9,8 +9,6 @@ configurable string HOST = ?;
 configurable int PORT = ?;
 configurable string DATABASE = ?;
 
-//final mysql:Client dbClient = check new (host = HOST, user = USER, password = PASSWORD, port = PORT, database = "Company");  <- remove after new client approved
-
 isolated client class MockSchemaClient {
     //*SchemaClient;                        <-uncomment when adding to main code repo
 
@@ -47,7 +45,7 @@ isolated client class MockSchemaClient {
         return tables;
     }
 
-    isolated remote function getTableInfo(string tableName, sql:ColumnRetrievalOptions include = sql:COLUMNS_ONLY) returns sql:TableDefinition|sql:Error { //return as sql:TableDefinition
+    isolated remote function getTableInfo(string tableName, sql:ColumnRetrievalOptions include = sql:COLUMNS_ONLY) returns sql:TableDefinition|sql:Error {
         record {}|sql:Error 'table = self.dbClient->queryRow(
             `SELECT TABLE_TYPE FROM information_schema.tables 
              WHERE (table_schema=${self.database} and table_name = ${tableName});`
@@ -60,7 +58,7 @@ isolated client class MockSchemaClient {
         } else {
             sql:TableDefinition tableDef = {
                 name: tableName,
-                'type: <TableType>'table["TABLE_TYPE"]
+                'type: <sql:TableType>'table["TABLE_TYPE"]
             };
 
             if !(include == sql:NO_COLUMNS) {
@@ -87,7 +85,7 @@ isolated client class MockSchemaClient {
 
                 tableDef.columns = columns;
 
-                if include == sql:COLUMNS_WITH_CONSTRAINTS {                                            //NEED TO ADD ERROR CHECKING LIKE EXAMPLE
+                if include == sql:COLUMNS_WITH_CONSTRAINTS {
                     map<sql:CheckConstraint[]> checkConstMap = {};
 
                     stream<record {}, sql:Error?> checkResults = self.dbClient->query(
@@ -101,7 +99,6 @@ isolated client class MockSchemaClient {
                                     name: <string>result["CONSTRAINT_NAME"],
                                     clause: <string>result["CHECK_CLAUSE"]
                                 };
-                                //checkConst.push('check);
 
                                 string colName = <string>result["COLUMN_NAME"];
                                 if checkConstMap[colName] is () {
@@ -114,15 +111,13 @@ isolated client class MockSchemaClient {
                     }
                     check checkResults.close();
 
-                    _ = checkpanic from sql:ColumnDefinition col in <sql:ColumnDefinition[]>tableDef.columns                        //NEW
+                    _ = checkpanic from sql:ColumnDefinition col in <sql:ColumnDefinition[]>tableDef.columns
                         do {
                             sql:CheckConstraint[]? checkConst = checkConstMap[col.name];
                             if !(checkConst is ()) && checkConst.length() != 0 {
                                 col.checkConstraints = checkConst;
                             }
-                            //col.checkConstraints = checkConst;
                         };
-
 
                     map<sql:ReferentialConstraint[]> refConstMap = {};
 
@@ -145,8 +140,7 @@ isolated client class MockSchemaClient {
                                     updateRule: <sql:ReferentialRule>result["UPDATE_RULE"],
                                     deleteRule: <sql:ReferentialRule>result["DELETE_RULE"]
                                 };
-                                //refConst.push(ref);
-                                
+
                                 string colName = <string>result["COLUMN_NAME"];
                                 if refConstMap[colName] is () {
                                     refConstMap[colName] = [];
@@ -157,24 +151,17 @@ isolated client class MockSchemaClient {
                         return error sql:Error("Error - recieved sql data is of type SQL:Error", cause = e);
                     }
 
-                    _ = checkpanic from sql:ColumnDefinition col in <sql:ColumnDefinition[]>tableDef.columns                    //NEW
+                    _ = checkpanic from sql:ColumnDefinition col in <sql:ColumnDefinition[]>tableDef.columns
                         do {
                             sql:ReferentialConstraint[]? refConst = refConstMap[col.name];
                             if !(refConst is ()) && refConst.length() != 0 {
                                 col.referentialConstraints = refConst;
                             }
-                            //col.referentialConstraints = refConst;
                         };
 
                     check refResults.close();
                 }
             }
-
-            //sql:TableDefinition sqlData = {name: data.table_name, 'type: <TableType>data.table_type};
-            // if data.columns is ColumnDefinition[] {
-            //     sqlData.columns = <sql:ColumnDefinition[]>data.columns; 
-            // }
-            //sqlData.columns = data.columns is ColumnDefinition[] ? <sql:ColumnDefinition[]>data.columns : ;       CANT USE TERNARY OPERATOR BECAUSE DONT HAVE ELSE
 
             return tableDef;
         }
@@ -205,35 +192,50 @@ isolated client class MockSchemaClient {
         return routines;
     }
 
-    isolated remote function getRoutineInfo(string name) returns RoutineDefinition|sql:Error {
-        string[] parameters = [];
-
-        RoutineDefinition|sql:Error routine = self.dbClient->queryRow(
-            `SELECT * FROM information_schema.routines where routine_name = ${name};`
+    isolated remote function getRoutineInfo(string name) returns sql:RoutineDefinition|sql:Error {
+        record {}|sql:Error routine = self.dbClient->queryRow(
+            `SELECT ROUTINE_TYPE, DATA_TYPE FROM INFORMATION_SCHEMA.ROUTINES 
+             WHERE ROUTINE_NAME = ${name};`
         );
 
-        stream<ParameterDefinition, sql:Error?> paramResults = self.dbClient->query(
-            `SELECT * FROM information_schema.parameters 
-            WHERE (specific_name=${name});`
-        );
-        do {
-            check from ParameterDefinition 'parameter in paramResults
-                do {
-                    parameters.push('parameter.toString());
-                };
-        } on fail error e {
-            return error("Parsing Failed", cause = e);
-        }
-        check paramResults.close();
+        if routine is sql:Error {
+            return error("RoutineName is incorrect");
+        } else if routine == {} {
+            return <sql:NoRowsError>error("Selected Routine does not exist or the user does not have privilages of viewing it");
+        } else {
+            sql:ParameterDefinition[] parameterList = [];
 
-        io:println("Parameter Metadata:\n");
-        foreach string 'parameter in parameters {
-            io:println('parameter);
-            io:println("\n");
-        }
-        io:println("\n\n");
+            stream<sql:ParameterDefinition, sql:Error?> paramResults = self.dbClient->query(
+                `SELECT p.PARAMETER_MODE, p.PARAMETER_NAME, p.DATA_TYPE
+                FROM INFORMATION_SCHEMA.PARAMETERS AS p
+                JOIN INFORMATION_SCHEMA.ROUTINES AS r
+                ON p.SPECIFIC_NAME = r.SPECIFIC_NAME
+                WHERE (p.SPECIFIC_SCHEMA = ${self.database} AND r.ROUTINE_NAME = ${name});`
+            );
+            do {
+                check from sql:ParameterDefinition parameters in paramResults
+                    do {
+                        sql:ParameterDefinition 'parameter = {
+                            mode: <sql:ParameterMode>parameters["PARAMETER_MODE"],
+                            name: <string>parameters["PARAMETER_NAME"],
+                            'type: <string>parameters["DATA_TYPE"]
+                        };
+                        parameterList.push('parameter);
+                    };
+            } on fail error e {
+                return error sql:Error("Error - recieved sql data is of type SQL:Error", cause = e);
+            }
+            check paramResults.close();
 
-        return routine;
+            sql:RoutineDefinition routineDef = {
+                name: name,
+                'type: <sql:RoutineType>routine["ROUTINE_TYPE"],
+                returnType: <string>routine["DATA_TYPE"],
+                parameters: parameterList
+            };
+
+            return routineDef;
+        }
     }
 }
 
@@ -241,22 +243,22 @@ public function main() returns sql:Error?|error {
 
     MockSchemaClient client1 = check new (HOST, USER, PASSWORD, DATABASE);
 
-    // string[]|error tableNames = client1->listTables();
-    // io:println("Table Names:\n");
-    // io:println(tableNames);
-    // io:println("");
+    string[]|error tableNames = client1->listTables();
+    io:println("Table Names:\n");
+    io:println(tableNames);
+    io:println("");
 
-    // sql:TableDefinition|sql:Error tableDef = client1->getTableInfo("employees", include = COLUMNS_WITH_CONSTRAINTS);
-    // io:println("Table Definition:\n");
-    // io:println(tableDef);
+    sql:TableDefinition|sql:Error tableDef = client1->getTableInfo("employees", include = sql:COLUMNS_WITH_CONSTRAINTS);
+    io:println("Table Definition:\n");
+    io:println(tableDef);
 
     string[]|error routineNames = client1->listRoutines();
     io:println("Routine Names:\n");
     io:println(routineNames);
     io:println("");
 
-    // RoutineDefinition|error r = getRoutineInfo("GetEmployeeByFirstName");
-    // io:println("Routine Definition:\n");
-    // io:println(r);
+    sql:RoutineDefinition|sql:Error routineDef = client1->getRoutineInfo("getEmpNumber");
+    io:println("Routine Definition:\n");
+    io:println(routineDef);
 }
 
