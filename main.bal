@@ -9,7 +9,7 @@ configurable string HOST = ?;
 configurable int PORT = ?;
 configurable string DATABASE = ?;
 
-isolated client class MockSchemaClient {
+isolated client class SchemaClient {
     //*SchemaClient;                        <-uncomment when adding to main code repo
 
     private final mysql:Client dbClient;
@@ -241,7 +241,7 @@ isolated client class MockSchemaClient {
 
 public function main() returns sql:Error?|error {
 
-    MockSchemaClient client1 = check new (HOST, USER, PASSWORD, DATABASE);
+    SchemaClient client1 = check new (HOST, USER, PASSWORD, DATABASE);
 
     string[]|error tableNames = client1->listTables();
     io:println("Table Names:\n");
