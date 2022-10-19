@@ -1,3 +1,19 @@
+// Copyright (c) 2022 WSO2 Inc. (http://www.wso2.org) All Rights Reserved.
+//
+// WSO2 Inc. licenses this file to you under the Apache License,
+// Version 2.0 (the "License"); you may not use this file except
+// in compliance with the License.
+// You may obtain a copy of the License at
+//
+// http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
 import ballerina/io;
 import ballerina/sql;
 import ballerinax/mysql;
@@ -9,6 +25,7 @@ configurable string HOST = ?;
 configurable int PORT = ?;
 configurable string DATABASE = ?;
 
+# Represents an SQL metadata client.
 isolated client class SchemaClient {
     //*SchemaClient;                        <-uncomment when adding to main code repo
 
@@ -20,6 +37,9 @@ isolated client class SchemaClient {
         self.dbClient = check new (host, user, password);
     }
 
+    # Retrieves all tables in the database.
+    # 
+    # + return - A string array containing the names of the tables or an `sql:Error`
     isolated remote function listTables() returns string[]|sql:Error {
         string[] tables = [];
         stream<record {|string table_name;|}, sql:Error?> results = self.dbClient->query(
@@ -45,6 +65,16 @@ isolated client class SchemaClient {
         return tables;
     }
 
+    # Retrieves information relevant to the provided table in the database.
+    # 
+    # + tableName - The name of the table
+    # + include - Options on whether column and constraint related information should be fetched.
+    #             If `NO_COLUMNS` is provided, then no information related to columns will be retrieved.
+    #             If `COLUMNS_ONLY` is provided, then columnar information will be retrieved, but not constraint
+    #             related information.
+    #             If `COLUMNS_WITH_CONSTRAINTS` is provided, then columar information along with constraint related
+    #             information will be retrieved
+    # + return - An 'sql:TableDefinition' with the relevant table information or an `sql:Error`
     isolated remote function getTableInfo(string tableName, sql:ColumnRetrievalOptions include = sql:COLUMNS_ONLY) returns sql:TableDefinition|sql:Error {
         record {}|sql:Error 'table = self.dbClient->queryRow(
             `SELECT TABLE_TYPE FROM information_schema.tables 
@@ -167,6 +197,10 @@ isolated client class SchemaClient {
         }
     }
 
+
+    # Retrieves all routines in the database.
+    # 
+    # + return - A string array containing the names of the routines or an `sql:Error`
     isolated remote function listRoutines() returns string[]|sql:Error {
         string[] routines = [];
         stream<record {|string routine_name;|}, sql:Error?> results = self.dbClient->query(
@@ -192,6 +226,10 @@ isolated client class SchemaClient {
         return routines;
     }
 
+    # Retrieves information relevant to the provided routine in the database.
+    # 
+    # + name - The name of the routine
+    # + return - An 'sql:RoutineDefinition' with the relevant routine information or an `sql:Error`
     isolated remote function getRoutineInfo(string name) returns sql:RoutineDefinition|sql:Error {
         record {}|sql:Error routine = self.dbClient->queryRow(
             `SELECT ROUTINE_TYPE, DATA_TYPE FROM INFORMATION_SCHEMA.ROUTINES 
