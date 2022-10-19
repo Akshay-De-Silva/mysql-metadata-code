@@ -14,16 +14,9 @@
 // specific language governing permissions and limitations
 // under the License.
 
-import ballerina/io;
 import ballerina/sql;
 import ballerinax/mysql;
 import ballerinax/mysql.driver as _;
-
-configurable string USER = ?;
-configurable string PASSWORD = ?;
-configurable string HOST = ?;
-configurable int PORT = ?;
-configurable string DATABASE = ?;
 
 # Represents an SQL metadata client.
 isolated client class SchemaClient {
@@ -276,27 +269,3 @@ isolated client class SchemaClient {
         }
     }
 }
-
-public function main() returns sql:Error?|error {
-
-    SchemaClient client1 = check new (HOST, USER, PASSWORD, DATABASE);
-
-    string[]|error tableNames = client1->listTables();
-    io:println("Table Names:\n");
-    io:println(tableNames);
-    io:println("");
-
-    sql:TableDefinition|sql:Error tableDef = client1->getTableInfo("employees", include = sql:COLUMNS_WITH_CONSTRAINTS);
-    io:println("Table Definition:\n");
-    io:println(tableDef);
-
-    string[]|error routineNames = client1->listRoutines();
-    io:println("Routine Names:\n");
-    io:println(routineNames);
-    io:println("");
-
-    sql:RoutineDefinition|sql:Error routineDef = client1->getRoutineInfo("getEmpNumber");
-    io:println("Routine Definition:\n");
-    io:println(routineDef);
-}
-
