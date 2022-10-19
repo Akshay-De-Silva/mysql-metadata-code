@@ -26,11 +26,11 @@ isolated client class SchemaClient {
     private final string database;
 
     # Initializes the SchemaClient object
-    # 
-    # + host - the name of where the mysql server is hosted (ex: localhost)
-    # + user - the username to access the database
-    # + password - the password to access the database
-    # + database - the name of the database to be accessed
+    #
+    # + host - The name of where the mysql server is hosted (ex: localhost)
+    # + user - The username to access the database
+    # + password - The password to access the database
+    # + database - The name of the database to be accessed
     # + return - A `sql:Error` or nil
     public function init(string host, string user, string password, string database) returns sql:Error? {
         self.database = database;
@@ -38,7 +38,7 @@ isolated client class SchemaClient {
     }
 
     # Retrieves all tables in the database.
-    # 
+    #
     # + return - A string array containing the names of the tables or an `sql:Error`
     isolated remote function listTables() returns string[]|sql:Error {
         string[] tables = [];
@@ -53,7 +53,7 @@ isolated client class SchemaClient {
                     tables.push(result.table_name.toString());
                 };
         } on fail error e {
-            return error("Parsing Failed", cause = e);
+            return error("Error - recieved sql data is of type SQL:Error", cause = e);
         }
 
         do {
@@ -66,7 +66,7 @@ isolated client class SchemaClient {
     }
 
     # Retrieves information relevant to the provided table in the database.
-    # 
+    #
     # + tableName - The name of the table
     # + include - Options on whether column and constraint related information should be fetched.
     #             If `NO_COLUMNS` is provided, then no information related to columns will be retrieved.
@@ -197,9 +197,8 @@ isolated client class SchemaClient {
         }
     }
 
-
     # Retrieves all routines in the database.
-    # 
+    #
     # + return - A string array containing the names of the routines or an `sql:Error`
     isolated remote function listRoutines() returns string[]|sql:Error {
         string[] routines = [];
@@ -214,7 +213,7 @@ isolated client class SchemaClient {
                     routines.push(result.routine_name.toString());
                 };
         } on fail error e {
-            return error("Parsing Failed", cause = e);
+            return error("Error - recieved sql data is of type SQL:Error", cause = e);
         }
 
         do {
@@ -227,7 +226,7 @@ isolated client class SchemaClient {
     }
 
     # Retrieves information relevant to the provided routine in the database.
-    # 
+    #
     # + name - The name of the routine
     # + return - An 'sql:RoutineDefinition' with the relevant routine information or an `sql:Error`
     isolated remote function getRoutineInfo(string name) returns sql:RoutineDefinition|sql:Error {
