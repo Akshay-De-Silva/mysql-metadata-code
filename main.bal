@@ -25,6 +25,13 @@ isolated client class SchemaClient {
     private final mysql:Client dbClient;
     private final string database;
 
+    # Initializes the SchemaClient object
+    # 
+    # + host - the name of where the mysql server is hosted (ex: localhost)
+    # + user - the username to access the database
+    # + password - the password to access the database
+    # + database - the name of the database to be accessed
+    # + return - A `sql:Error` or nil
     public function init(string host, string user, string password, string database) returns sql:Error? {
         self.database = database;
         self.dbClient = check new (host, user, password);
