@@ -281,6 +281,10 @@ isolated client class SchemaClient {
             return routineDef;
         }
     }
+
+    public isolated function close() returns error? {
+        _ = check self.dbClient.close();
+    }
 }
 
 public function main() returns sql:Error?|error {
@@ -304,4 +308,6 @@ public function main() returns sql:Error?|error {
     sql:RoutineDefinition|sql:Error routineDef = client1->getRoutineInfo("getEmpsName");
     io:println("Routine Definition:\n");
     io:println(routineDef);
+
+    check client1.close();
 }
