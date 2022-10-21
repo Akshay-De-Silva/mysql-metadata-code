@@ -41,7 +41,7 @@ function listTablesTest_Fail() returns error? {
     groups: ["schemaClientTest"]
 }
 function getTableInfo_NoCol() returns error? {
-    SchemaClient client1 = check new("localhost", "root", "password", "testDB1");
+    SchemaClient client1 = check new("localhost", "root", "password", "testDB");
     sql:TableDefinition|sql:Error 'table = check client1->getTableInfo("employees", include = sql:NO_COLUMNS);
     check client1.close();
     test:assertEquals('table, {"name":"employees","type":"BASE TABLE"});
@@ -51,7 +51,7 @@ function getTableInfo_NoCol() returns error? {
     groups: ["schemaClientTest"]
 }
 function getTableInfo_OnlyCol() returns error? {
-    SchemaClient client1 = check new("localhost", "root", "password", "testDB1");
+    SchemaClient client1 = check new("localhost", "root", "password", "testDB");
     sql:TableDefinition|sql:Error 'table = check client1->getTableInfo("employees", include = sql:COLUMNS_ONLY);
     check client1.close();
     test:assertEquals('table, {"name":"employees","type":"BASE TABLE",
@@ -69,7 +69,7 @@ function getTableInfo_OnlyCol() returns error? {
     groups: ["schemaClientTest"]
 }
 function getTableInfo_ColConstraint() returns error? {
-    SchemaClient client1 = check new("localhost", "root", "password", "testDB1");
+    SchemaClient client1 = check new("localhost", "root", "password", "testDB");
     sql:TableDefinition|sql:Error 'table = check client1->getTableInfo("employees", include = sql:COLUMNS_WITH_CONSTRAINTS);
     check client1.close();
     test:assertEquals('table, {"name":"employees","type":"BASE TABLE",
@@ -89,7 +89,7 @@ function getTableInfo_ColConstraint() returns error? {
     groups: ["schemaClientTest"]
 }
 function getTableInfo_Fail() returns error? {
-    SchemaClient client1 = check new("localhost", "root", "password", "testDB1");
+    SchemaClient client1 = check new("localhost", "root", "password", "testDB");
     sql:TableDefinition|sql:Error 'table = check client1->getTableInfo("employee", include = sql:NO_COLUMNS);
     check client1.close();
     if 'table is sql:NoRowsError {
@@ -123,7 +123,7 @@ function listRoutinesTest_Fail() returns error? {
     groups: ["schemaClientTest"]
 }
 function getRoutineInfo_Working() returns error? {
-    SchemaClient client1 = check new("localhost", "root", "password", "testDB1");
+    SchemaClient client1 = check new("localhost", "root", "password", "testDB");
     sql:RoutineDefinition|sql:Error routine = check client1->getRoutineInfo("getEmpsName");
     check client1.close();
     test:assertEquals(routine, {"name":"getEmpsName","type":"PROCEDURE","returnType":"",
@@ -135,7 +135,7 @@ function getRoutineInfo_Working() returns error? {
     groups: ["schemaClientTest"]
 }
 function getRoutineInfo_Fail() returns error? {
-    SchemaClient client1 = check new("localhost", "root", "password", "testDB1");
+    SchemaClient client1 = check new("localhost", "root", "password", "testDB");
     sql:RoutineDefinition|sql:Error routine = check client1->getRoutineInfo("getEmpsNames");
     check client1.close();
     if routine is sql:NoRowsError {
