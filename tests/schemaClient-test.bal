@@ -17,17 +17,6 @@
 import ballerina/test;
 import ballerina/sql;
 
-
-isolated function colLength(sql:ColumnDefinition[] colDef) returns int? {
-    int len = colDef.length();
-    return len;
-}
-
-isolated function paramLength(sql:ParameterDefinition[] paramDef) returns int? {
-    int len = paramDef.length();
-    return len;
-}
-
 @test:Config {
     groups: ["schemaClientTest"]
 }
@@ -67,7 +56,7 @@ function testGetTableInfoColumnsOnly() returns error? {
     check client1.close();
     test:assertEquals('table.name, "employees");
     test:assertEquals('table.'type, "BASE TABLE");
-    test:assertEquals(colLength(<sql:ColumnDefinition[]>'table.columns), 8);  
+    test:assertEquals((<sql:ColumnDefinition[]>'table.columns).length(), 8);  
 }
 
 @test:Config {
@@ -79,7 +68,7 @@ function testGetTableInfoColumnsWithConstraints() returns error? {
     check client1.close();
     test:assertEquals('table.name, "employees");
     test:assertEquals('table.'type, "BASE TABLE");
-    test:assertEquals(colLength(<sql:ColumnDefinition[]>'table.columns), 8);
+    test:assertEquals((<sql:ColumnDefinition[]>'table.columns).length(), 8);
 }
 
 @test:Config {
@@ -125,7 +114,7 @@ function testGetRoutineInfoWorking() returns error? {
     check client1.close();
     test:assertEquals(routine.name, "getEmpsName");
     test:assertEquals(routine.'type, "PROCEDURE");
-    test:assertEquals(paramLength(<sql:ParameterDefinition[]>routine.parameters), 2); 
+    test:assertEquals((<sql:ParameterDefinition[]>routine.parameters).length(), 2);
 }
 
 @test:Config {
