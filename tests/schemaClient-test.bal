@@ -17,10 +17,21 @@
 import ballerina/test;
 import ballerina/sql;
 
+
+isolated function colLength(sql:ColumnDefinition[] colDef) returns int? {
+    int len = colDef.length();
+    return len;
+}
+
+isolated function paramLength(sql:ParameterDefinition[] paramDef) returns int? {
+    int len = paramDef.length();
+    return len;
+}
+
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function listTablesTest_Working() returns error? {
+function testListTablesWorking() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB");
     string [] tableList = check client1->listTables();
     check client1.close();
@@ -30,7 +41,7 @@ function listTablesTest_Working() returns error? {
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function listTablesTest_Fail() returns error? {
+function testListTablesFail() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB1");
     string [] tableList = check client1->listTables();
     check client1.close();
@@ -40,9 +51,9 @@ function listTablesTest_Fail() returns error? {
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function getTableInfo_NoCol() returns error? {
+function testGetTableInfoNoColumns() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB");
-    sql:TableDefinition|sql:Error 'table = check client1->getTableInfo("employees", include = sql:NO_COLUMNS);
+    sql:TableDefinition 'table = check client1->getTableInfo("employees", include = sql:NO_COLUMNS);
     check client1.close();
     test:assertEquals('table, {"name":"employees","type":"BASE TABLE"});
 }
@@ -50,59 +61,45 @@ function getTableInfo_NoCol() returns error? {
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function getTableInfo_OnlyCol() returns error? {
+function testGetTableInfoColumnsOnly() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB");
-    sql:TableDefinition|sql:Error 'table = check client1->getTableInfo("employees", include = sql:COLUMNS_ONLY);
+    sql:TableDefinition 'table = check client1->getTableInfo("employees", include = sql:COLUMNS_ONLY);
     check client1.close();
-    test:assertEquals('table, {"name":"employees","type":"BASE TABLE",
-                               "columns":[{"name":"employeeNumber","type":"int","defaultValue":null,"nullable":false},
-                               {"name":"lastName","type":"varchar","defaultValue":null,"nullable":false},
-                               {"name":"firstName","type":"varchar","defaultValue":null,"nullable":false},
-                               {"name":"extension","type":"varchar","defaultValue":null,"nullable":false},
-                               {"name":"email","type":"varchar","defaultValue":null,"nullable":false},
-                               {"name":"officeCode","type":"varchar","defaultValue":null,"nullable":false},
-                               {"name":"reportsTo","type":"int","defaultValue":null,"nullable":true},
-                               {"name":"jobTitle","type":"varchar","defaultValue":null,"nullable":false}]});
+    test:assertEquals('table.name, "employees");
+    test:assertEquals('table.'type, "BASE TABLE");
+    test:assertEquals(colLength(<sql:ColumnDefinition[]>'table.columns), 8);  
 }
 
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function getTableInfo_ColConstraint() returns error? {
+function testGetTableInfoColumnsWithConstraints() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB");
-    sql:TableDefinition|sql:Error 'table = check client1->getTableInfo("employees", include = sql:COLUMNS_WITH_CONSTRAINTS);
+    sql:TableDefinition 'table = check client1->getTableInfo("employees", include = sql:COLUMNS_WITH_CONSTRAINTS);
     check client1.close();
-    test:assertEquals('table, {"name":"employees","type":"BASE TABLE",
-                               "columns":[{"name":"employeeNumber","type":"int","defaultValue":null,"nullable":false},
-                               {"name":"lastName","type":"varchar","defaultValue":null,"nullable":false},
-                               {"name":"firstName","type":"varchar","defaultValue":null,"nullable":false},
-                               {"name":"extension","type":"varchar","defaultValue":null,"nullable":false},
-                               {"name":"email","type":"varchar","defaultValue":null,"nullable":false},
-                               {"name":"officeCode","type":"varchar","defaultValue":null,"nullable":false,
-                               "referentialConstraints":[{"name":"employees_ibfk_2","tableName":"employees","columnName":"officeCode","updateRule":"NO ACTION","deleteRule":"NO ACTION"}]},
-                               {"name":"reportsTo","type":"int","defaultValue":null,"nullable":true,
-                               "referentialConstraints":[{"name":"employees_ibfk_1","tableName":"employees","columnName":"reportsTo","updateRule":"NO ACTION","deleteRule":"NO ACTION"}]},
-                               {"name":"jobTitle","type":"varchar","defaultValue":null,"nullable":false}]});
+    test:assertEquals('table.name, "employees");
+    test:assertEquals('table.'type, "BASE TABLE");
+    test:assertEquals(colLength(<sql:ColumnDefinition[]>'table.columns), 8);
 }
 
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function getTableInfo_Fail() returns error? {
+function testGetTableInfoFail() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB");
-    sql:TableDefinition|sql:Error 'table = check client1->getTableInfo("employee", include = sql:NO_COLUMNS);
+    sql:TableDefinition|sql:Error 'table = client1->getTableInfo("employee", include = sql:NO_COLUMNS);
     check client1.close();
-    if 'table is sql:NoRowsError {
-        test:assertEquals('table, "Tablename is incorrect");
+    if 'table is sql:Error {
+        test:assertEquals('table.message(), "Selected Table does not exist or the user does not have privilages of viewing the Table");
     } else {
-        test:assertFail("Selected Table does not exist or the user does not have privilages of viewing the Table");
+        test:assertFail("Expected result not recieved");
     }
 }
 
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function listRoutinesTest_Working() returns error? {
+function testListRoutinesWorking() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB");
     string [] routineList = check client1->listRoutines();
     check client1.close();
@@ -112,7 +109,7 @@ function listRoutinesTest_Working() returns error? {
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function listRoutinesTest_Fail() returns error? {
+function testListRoutinesFail() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB1");
     string [] routineList = check client1->listRoutines();
     check client1.close();
@@ -122,25 +119,25 @@ function listRoutinesTest_Fail() returns error? {
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function getRoutineInfo_Working() returns error? {
+function testGetRoutineInfoWorking() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB");
-    sql:RoutineDefinition|sql:Error routine = check client1->getRoutineInfo("getEmpsName");
+    sql:RoutineDefinition routine = check client1->getRoutineInfo("getEmpsName");
     check client1.close();
-    test:assertEquals(routine, {"name":"getEmpsName","type":"PROCEDURE","returnType":"",
-                                "parameters":[{"mode":"IN","name":"empNumber","type":"int"},
-                                {"mode":"OUT","name":"fName","type":"varchar"}]});
+    test:assertEquals(routine.name, "getEmpsName");
+    test:assertEquals(routine.'type, "PROCEDURE");
+    test:assertEquals(paramLength(<sql:ParameterDefinition[]>routine.parameters), 2); 
 }
 
 @test:Config {
     groups: ["schemaClientTest"]
 }
-function getRoutineInfo_Fail() returns error? {
+function testGetRoutineInfoFail() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "testDB");
-    sql:RoutineDefinition|sql:Error routine = check client1->getRoutineInfo("getEmpsNames");
+    sql:RoutineDefinition|sql:Error routine = client1->getRoutineInfo("getEmpsNames");
     check client1.close();
-    if routine is sql:NoRowsError {
-        test:assertEquals(routine, "RoutineName is incorrect");
+    if routine is sql:Error {
+        test:assertEquals(routine.message(), "Selected Routine does not exist or the user does not have privilages of viewing it");
     } else {
-        test:assertFail("Selected Routine does not exist or the user does not have privilages of viewing it");
+        test:assertFail("Expected result not recieved");
     }
 }

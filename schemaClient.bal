@@ -88,10 +88,10 @@ isolated client class SchemaClient {
              WHERE (table_schema=${self.database} and table_name = ${tableName});`
         );
 
-        if 'table is sql:Error {
-            return error("Tablename is incorrect");
-        } else if 'table == {} {
-            return <sql:NoRowsError>error("Selected Table does not exist or the user does not have privilages of viewing the Table");
+        if 'table is sql:NoRowsError {
+            return error sql:NoRowsError("Selected Table does not exist or the user does not have privilages of viewing the Table");
+        } else if 'table is sql:Error {
+            return 'table;
         } else {
             sql:TableDefinition tableDef = {
                 name: tableName,
@@ -242,10 +242,10 @@ isolated client class SchemaClient {
              WHERE ROUTINE_NAME = ${name};`
         );
 
-        if routine is sql:Error {
-            return error("RoutineName is incorrect");
-        } else if routine == {} {
-            return <sql:NoRowsError>error("Selected Routine does not exist or the user does not have privilages of viewing it");
+        if routine is sql:NoRowsError {
+            return error sql:NoRowsError("Selected Routine does not exist or the user does not have privilages of viewing it");
+        } else if routine is sql:Error {
+            return routine;
         } else {
             sql:ParameterDefinition[] parameterList = [];
 
@@ -295,7 +295,7 @@ isolated client class SchemaClient {
 //     io:println(tableNames);
 //     io:println("");
 
-//     sql:TableDefinition|sql:Error tableDef = client1->getTableInfo("employees", include = sql:COLUMNS_WITH_CONSTRAINTS);
+//     sql:TableDefinition|sql:Error tableDef = client1->getTableInfo("employees", include = sql:COLUMNS_ONLY);
 //     io:println("Table Definition:\n");
 //     io:println(tableDef);
 //     io:println("");
