@@ -14,9 +14,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
+import ballerina/io;                        //DELETE
 import ballerina/sql;
 import ballerinax/mysql;                    //DELETE
 import ballerinax/mysql.driver as _;        //DELETE
+
+configurable string USER = ?;
+configurable string PASSWORD = ?;
+configurable string HOST = ?;
+configurable int PORT = ?;
+configurable string DATABASE = ?;
 
 # Represents an SQL metadata client.
 isolated client class SchemaClient {
@@ -30,9 +37,10 @@ isolated client class SchemaClient {
     # + password - The password to access the database
     # + database - The name of the database to be accessed
     # + return - An `sql:Error` or `()`
-    public function init(string host, string user, string password, string database) returns sql:Error? {
+    public function init(string host, string user, string password, string database, int port, 
+            mysql:Options? options, sql:ConnectionPool? connectionPool) returns sql:Error? {             //REMOVE MYSQL PART OF OPTIONS
         self.database = database;
-        self.dbClient = check new (host, user, password);
+        self.dbClient = check new (host, user, password, database, port, options, connectionPool);
     }
 
     # Retrieves all tables in the database.
@@ -40,25 +48,19 @@ isolated client class SchemaClient {
     # + return - A string array containing the names of the tables or an `sql:Error`
     isolated remote function listTables() returns string[]|sql:Error {
         string[] tables = [];
-        stream<record {|string table_name;|}, sql:Error?> results = self.dbClient->query(
+        stream<record {}, sql:Error?> results = self.dbClient->query(
             `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
              WHERE TABLE_SCHEMA = ${self.database};`
         );
 
         do {
-            check from record {|string table_name;|} result in results
-                do {
-                    tables.push(result.table_name.toString());
-                };
+            tables = check from record {} result in results
+                select <string>result["TABLE_NAME"];
         } on fail error e {
-            return error(string `Error while listing the tables in  the ${self.database} database.`, cause = e);
+            return error sql:Error(string `Error while listing the tables in the ${self.database} database.`, cause = e);
         }
 
-        do {
-            check results.close();
-        } on fail error e {
-            return error("Error while closing the result stream.", cause = e);
-        }
+        check results.close();
 
         return tables;
     }
@@ -80,7 +82,7 @@ isolated client class SchemaClient {
         );
 
         if 'table is sql:NoRowsError {
-            return error sql:NoRowsError("Selected Table does not exist or the user does not have privilages of viewing the Table");
+            return error sql:NoRowsError("The selected table does not exist or the user does not have the required privilege level to view the table.");
         } else if 'table is sql:Error {
             return 'table;
         } else {
@@ -90,119 +92,19 @@ isolated client class SchemaClient {
             };
 
             if !(include == sql:NO_COLUMNS) {
-                sql:ColumnDefinition[] columns = [];
-                stream<record {}, sql:Error?> colResults = self.dbClient->query(
-                    `SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS 
-                     WHERE (TABLE_SCHEMA=${self.database} AND TABLE_NAME = ${tableName});`
-                );
-                do {
-                    check from record {} result in colResults
-                        do {
-                            sql:ColumnDefinition column = {
-                                name: <string>result["COLUMN_NAME"],
-                                'type: <string>result["DATA_TYPE"],
-                                defaultValue: result["COLUMN_DEFAULT"],
-                                nullable: (<string>result["IS_NULLABLE"]) == "YES" ? true : false
-                            };
-                            columns.push(column);
-                        };
-                } on fail error e {
-                    return error(string `Error while reading column info in the ${tableName} table, in the ${self.database} database.`, cause = e);
+                sql:TableDefinition|sql:Error tableDefError = self.getColumns(tableName, tableDef);
+        
+                if tableDefError is sql:TableDefinition {
+                    tableDef = tableDefError;
                 }
-
-                do {
-                    check colResults.close();
-                } on fail error e {
-                    return error("Error while closing the result stream.", cause = e);
-                }
-
-                tableDef.columns = columns;
 
                 if include == sql:COLUMNS_WITH_CONSTRAINTS {
-                    map<sql:CheckConstraint[]> checkConstMap = {};
+                    tableDefError = self.getConstraints(tableName, tableDef);
 
-                    stream<record {}, sql:Error?> checkResults = self.dbClient->query(
-                        `SELECT CONSTRAINT_NAME, CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS 
-                        WHERE CONSTRAINT_SCHEMA=${self.database};`
-                    );
-                    do {
-                        check from record {} result in checkResults
-                            do {
-                                sql:CheckConstraint 'check = {
-                                    name: <string>result["CONSTRAINT_NAME"],
-                                    clause: <string>result["CHECK_CLAUSE"]
-                                };
-
-                                string colName = <string>result["COLUMN_NAME"];
-                                if checkConstMap[colName] is () {
-                                    checkConstMap[colName] = [];
-                                }
-                                checkConstMap.get(colName).push('check);
-                            };
-                    } on fail error e {
-                        return error(string `Error while reading check constraints in the ${self.database} database.`, cause = e);
+                    if tableDefError is sql:TableDefinition {
+                        tableDef = tableDefError;
                     }
-
-                    do {
-                        check checkResults.close();
-                    } on fail error e {
-                        return error("Error while closing the result stream.", cause = e);
-                    }
-
-                    _ = checkpanic from sql:ColumnDefinition col in <sql:ColumnDefinition[]>tableDef.columns
-                        do {
-                            sql:CheckConstraint[]? checkConst = checkConstMap[col.name];
-                            if checkConst is sql:CheckConstraint[] && checkConst.length() != 0 {
-                                col.checkConstraints = checkConst;
-                            }
-                        };
-
-                    map<sql:ReferentialConstraint[]> refConstMap = {};
-
-                    stream<record {}, sql:Error?> refResults = self.dbClient->query(
-                        `SELECT KCU.CONSTRAINT_NAME, KCU.TABLE_NAME, KCU.COLUMN_NAME, RC.UPDATE_RULE, RC.DELETE_RULE
-                        FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS RC 
-                        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE as KCU
-                        ON KCU.CONSTRAINT_CATALOG = RC.CONSTRAINT_CATALOG 
-                        AND KCU.CONSTRAINT_SCHEMA = RC.CONSTRAINT_SCHEMA
-                        AND KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME
-                        WHERE (RC.CONSTRAINT_SCHEMA=${self.database} AND KCU.TABLE_NAME = ${tableName});`
-                    );
-                    do {
-                        check from record {} result in refResults
-                            do {
-                                sql:ReferentialConstraint ref = {
-                                    name: <string>result["CONSTRAINT_NAME"],
-                                    tableName: <string>result["TABLE_NAME"],
-                                    columnName: <string>result["COLUMN_NAME"],
-                                    updateRule: <sql:ReferentialRule>result["UPDATE_RULE"],
-                                    deleteRule: <sql:ReferentialRule>result["DELETE_RULE"]
-                                };
-
-                                string colName = <string>result["COLUMN_NAME"];
-                                if refConstMap[colName] is () {
-                                    refConstMap[colName] = [];
-                                }
-                                refConstMap.get(colName).push(ref);
-                            };
-                    } on fail error e {
-                        return error sql:Error(string `Error while reading referential constraints in the ${tableName} table, in the ${self.database} database.`, cause = e);
-                    }
-
-                    _ = checkpanic from sql:ColumnDefinition col in <sql:ColumnDefinition[]>tableDef.columns
-                        do {
-                            sql:ReferentialConstraint[]? refConst = refConstMap[col.name];
-                            if refConst is sql:ReferentialConstraint[] && refConst.length() != 0 {
-                                col.referentialConstraints = refConst;
-                            }
-                        };
-
-                    do {
-                        check refResults.close();
-                    } on fail error e {
-                        return error("Error while closing the result stream.", cause = e);
-                    }
-                }
+                }    
             }
 
             return tableDef;
@@ -214,25 +116,19 @@ isolated client class SchemaClient {
     # + return - A string array containing the names of the routines or an `sql:Error`
     isolated remote function listRoutines() returns string[]|sql:Error {
         string[] routines = [];
-        stream<record {|string routine_name;|}, sql:Error?> results = self.dbClient->query(
+        stream<record {}, sql:Error?> results = self.dbClient->query(
             `SELECT ROUTINE_NAME FROM INFORMATION_SCHEMA.ROUTINES
             WHERE ROUTINE_SCHEMA = ${self.database};`
         );
 
         do {
-            check from record {|string routine_name;|} result in results
-                do {
-                    routines.push(result.routine_name.toString());
-                };
+            routines = check from record {} result in results
+                select <string>result["ROUTINE_NAME"];
         } on fail error e {
-            return error(string `Error while listing the routines in  the ${self.database} database.`, cause = e);
+            return error(string `Error while listing routines in the ${self.database} database.`, cause = e);
         }
 
-        do {
-            check results.close();
-        } on fail error e {
-            return error("Error while closing the result stream.", cause = e);
-        }
+        check results.close();
 
         return routines;
     }
@@ -248,48 +144,178 @@ isolated client class SchemaClient {
         );
 
         if routine is sql:NoRowsError {
-            return error sql:NoRowsError("Selected Routine does not exist or the user does not have privilages of viewing it");
+            return error sql:NoRowsError("Selected routine does not exist in the database, or the user does not have required privilege level to view it.");
         } else if routine is sql:Error {
             return routine;
         } else {
-            sql:ParameterDefinition[] parameterList = [];
+            sql:RoutineDefinition|sql:Error routineError = self.getParameters(name, <sql:RoutineDefinition>routine);
+            sql:RoutineDefinition routineDef = <sql:RoutineDefinition>routine;
 
-            stream<sql:ParameterDefinition, sql:Error?> paramResults = self.dbClient->query(
-                `SELECT P.PARAMETER_MODE, P.PARAMETER_NAME, P.DATA_TYPE
-                FROM INFORMATION_SCHEMA.PARAMETERS AS P
-                JOIN INFORMATION_SCHEMA.ROUTINES AS R
-                ON P.SPECIFIC_NAME = R.SPECIFIC_NAME
-                WHERE (P.SPECIFIC_SCHEMA = ${self.database} AND R.ROUTINE_NAME = ${name});`
-            );
-            do {
-                check from sql:ParameterDefinition parameters in paramResults
-                    do {
-                        sql:ParameterDefinition 'parameter = {
-                            mode: <sql:ParameterMode>parameters["PARAMETER_MODE"],
-                            name: <string>parameters["PARAMETER_NAME"],
-                            'type: <string>parameters["DATA_TYPE"]
-                        };
-                        parameterList.push('parameter);
-                    };
-            } on fail error e {
-                return error sql:Error("Error - recieved sql data is of type SQL:Error", cause = e);
+            if routineError is sql:RoutineDefinition {
+                routineDef = routineError;
             }
-
-            do {
-                check paramResults.close();
-            } on fail error e {
-                return error("Error while closing the result stream.", cause = e);
-            }
-
-            sql:RoutineDefinition routineDef = {
-                name: name,
-                'type: <sql:RoutineType>routine["ROUTINE_TYPE"],
-                returnType: <string>routine["DATA_TYPE"],
-                parameters: parameterList
-            };
 
             return routineDef;
         }
+    }
+
+    # Retrieves column information of the provided table in the database.
+    #
+    # + tableName - The name of the table
+    # + tableDef - The table definition created in getTableInfo()
+    # + return - An 'sql:TableDefinition' now including the column information or an `sql:Error`
+    isolated function getColumns(string tableName, sql:TableDefinition tableDef) returns sql:TableDefinition|sql:Error {
+        sql:ColumnDefinition[] columns = [];
+        stream<record {}, sql:Error?> colResults = self.dbClient->query(
+            `SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS 
+                WHERE (TABLE_SCHEMA=${self.database} AND TABLE_NAME = ${tableName});`
+        );
+        do {
+            check from record {} result in colResults
+                do {
+                    sql:ColumnDefinition column = {
+                        name: <string>result["COLUMN_NAME"],
+                        'type: <string>result["DATA_TYPE"],
+                        defaultValue: result["COLUMN_DEFAULT"],
+                        nullable: (<string>result["IS_NULLABLE"]) == "YES" ? true : false
+                    };
+                    columns.push(column);
+                };
+        } on fail error e {
+            return error sql:Error(string `Error while reading column info in the ${tableName} table, in the ${self.database} database.`, cause = e);
+        }
+
+        check colResults.close();
+
+        tableDef.columns = columns;
+
+        return tableDef;
+    }
+
+    # Retrieves constraints information of the provided table in the database.
+    #
+    # + tableName - The name of the table
+    # + tableDef - The table definition created in getTableInfo()
+    # + return - An 'sql:TableDefinition' now including the constraint information or an `sql:Error`
+    isolated function getConstraints(string tableName, sql:TableDefinition tableDef) returns sql:TableDefinition|sql:Error {
+        map<sql:CheckConstraint[]> checkConstMap = {};
+
+        stream<record {}, sql:Error?> checkResults = self.dbClient->query(
+            `SELECT CONSTRAINT_NAME, CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS 
+            WHERE CONSTRAINT_SCHEMA=${self.database};`
+        );
+        do {
+            check from record {} result in checkResults
+                do {
+                    sql:CheckConstraint 'check = {
+                        name: <string>result["CONSTRAINT_NAME"],
+                        clause: <string>result["CHECK_CLAUSE"]
+                    };
+
+                    string colName = <string>result["COLUMN_NAME"];
+                    if checkConstMap[colName] is () {
+                        checkConstMap[colName] = [];
+                    }
+                    checkConstMap.get(colName).push('check);
+                };
+        } on fail error e {
+            return error sql:Error(string `Error while reading check constraints in the ${self.database} database.`, cause = e);
+        }
+
+        check checkResults.close();
+
+        _ = checkpanic from sql:ColumnDefinition col in <sql:ColumnDefinition[]>tableDef.columns
+            do {
+                sql:CheckConstraint[]? checkConst = checkConstMap[col.name];
+                if checkConst is sql:CheckConstraint[] && checkConst.length() != 0 {
+                    col.checkConstraints = checkConst;
+                }
+            };
+
+        map<sql:ReferentialConstraint[]> refConstMap = {};
+
+        stream<record {}, sql:Error?> refResults = self.dbClient->query(
+            `SELECT KCU.CONSTRAINT_NAME, KCU.TABLE_NAME, KCU.COLUMN_NAME, RC.UPDATE_RULE, RC.DELETE_RULE
+            FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS RC 
+            JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE as KCU
+            ON KCU.CONSTRAINT_CATALOG = RC.CONSTRAINT_CATALOG 
+            AND KCU.CONSTRAINT_SCHEMA = RC.CONSTRAINT_SCHEMA
+            AND KCU.CONSTRAINT_NAME = RC.CONSTRAINT_NAME
+            WHERE (RC.CONSTRAINT_SCHEMA=${self.database} AND KCU.TABLE_NAME = ${tableName});`
+        );
+        do {
+            check from record {} result in refResults
+                do {
+                    sql:ReferentialConstraint ref = {
+                        name: <string>result["CONSTRAINT_NAME"],
+                        tableName: <string>result["TABLE_NAME"],
+                        columnName: <string>result["COLUMN_NAME"],
+                        updateRule: <sql:ReferentialRule>result["UPDATE_RULE"],
+                        deleteRule: <sql:ReferentialRule>result["DELETE_RULE"]
+                    };
+
+                    string colName = <string>result["COLUMN_NAME"];
+                    if refConstMap[colName] is () {
+                        refConstMap[colName] = [];
+                    }
+                    refConstMap.get(colName).push(ref);
+                };
+        } on fail error e {
+            return error sql:Error(string `Error while reading referential constraints in the ${tableName} table, in the ${self.database} database.`, cause = e);
+        }
+
+        _ = checkpanic from sql:ColumnDefinition col in <sql:ColumnDefinition[]>tableDef.columns
+            do {
+                sql:ReferentialConstraint[]? refConst = refConstMap[col.name];
+                if refConst is sql:ReferentialConstraint[] && refConst.length() != 0 {
+                    col.referentialConstraints = refConst;
+                }
+            };
+
+        check refResults.close();
+
+        return tableDef;
+    }
+
+    # Retrieves parameter information of the provided routine in the database.
+    #
+    # + name - The name of the routine
+    # + routine - The routine definition created in getRoutineInfo()
+    # + return - An 'sql:RoutineDefinition' now including the parameter information or an `sql:Error`
+    isolated function getParameters(string name, sql:RoutineDefinition routine) returns sql:RoutineDefinition|sql:Error {
+        sql:ParameterDefinition[] parameterList = [];
+
+        stream<sql:ParameterDefinition, sql:Error?> paramResults = self.dbClient->query(
+            `SELECT P.PARAMETER_MODE, P.PARAMETER_NAME, P.DATA_TYPE
+            FROM INFORMATION_SCHEMA.PARAMETERS AS P
+            JOIN INFORMATION_SCHEMA.ROUTINES AS R
+            ON P.SPECIFIC_NAME = R.SPECIFIC_NAME
+            WHERE (P.SPECIFIC_SCHEMA = ${self.database} AND R.ROUTINE_NAME = ${name});`
+        );
+        do {
+            check from sql:ParameterDefinition parameters in paramResults
+                do {
+                    sql:ParameterDefinition 'parameter = {
+                        mode: <sql:ParameterMode>parameters["PARAMETER_MODE"],
+                        name: <string>parameters["PARAMETER_NAME"],
+                        'type: <string>parameters["DATA_TYPE"]
+                    };
+                    parameterList.push('parameter);
+                };
+        } on fail error e {
+            return error sql:Error(string `Error while reading parameters in the ${name} routine, in the ${self.database} database.`, cause = e);
+        }
+
+        check paramResults.close();
+
+        sql:RoutineDefinition routineDef = {
+            name: name,
+            'type: <sql:RoutineType>routine["ROUTINE_TYPE"],
+            returnType: <string>routine["DATA_TYPE"],
+            parameters: parameterList
+        };
+
+        return routineDef;
     }
 
     public isolated function close() returns error? {
@@ -299,4 +325,29 @@ isolated client class SchemaClient {
             return error("Error while closing the client", cause = e);
         }
     }
+}
+
+public function main() returns sql:Error?|error {                                                                         //DELETE ALL OF MAIN
+    SchemaClient client1 = check new (HOST, USER, PASSWORD, DATABASE, PORT, (), ());
+
+    string[]|error tableNames = client1->listTables();
+    io:println("Table Names:\n");
+    io:println(tableNames);
+    io:println("");
+
+    sql:TableDefinition|sql:Error tableDef = client1->getTableInfo("employees", include = sql:COLUMNS_ONLY);
+    io:println("Table Definition:\n");
+    io:println(tableDef);
+    io:println("");
+
+    string[]|error routineNames = client1->listRoutines();
+    io:println("Routine Names:\n");
+    io:println(routineNames);
+    io:println("");
+
+    sql:RoutineDefinition|sql:Error routineDef = client1->getRoutineInfo("getEmpsName");
+    io:println("Routine Definition:\n");
+    io:println(routineDef);
+
+    check client1.close();
 }
