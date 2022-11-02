@@ -31,7 +31,7 @@ function testListTables() returns error? {
     groups: ["metadata"]
 }
 function testListTablesNegative() returns error? {
-    SchemaClient client1 = check new("localhost", "root", "password", "metadataDB1", 3306, (), ());
+    SchemaClient client1 = check new("localhost", "root", "password", "metadataEmptyDB", 3306, (), ());
     string[] tableList = check client1->listTables();
     check client1.close();
     test:assertEquals(tableList, []);
@@ -56,7 +56,14 @@ function testGetTableInfoColumnsOnly() returns error? {
     check client1.close();
     test:assertEquals('table.name, "employees");
     test:assertEquals('table.'type, "BASE TABLE");
-    test:assertEquals((<sql:ColumnDefinition[]>'table.columns).length(), 8);  
+
+    string tableCol = (<sql:ColumnDefinition[]>'table.columns).toString();
+    boolean columnCheck = tableCol.includes("EMPLOYEENUMBER") && tableCol.includes("LASTNAME") && 
+                         tableCol.includes("FIRSTNAME") && tableCol.includes("EXTENSION") && 
+                         tableCol.includes("EMAIL") && tableCol.includes("OFFICECODE") && 
+                         tableCol.includes("REPORTSTO") && tableCol.includes("JOBTITLE");
+
+    test:assertEquals(columnCheck, true);
 }
 
 @test:Config {
@@ -68,7 +75,17 @@ function testGetTableInfoColumnsWithConstraints() returns error? {
     check client1.close();
     test:assertEquals('table.name, "employees");
     test:assertEquals('table.'type, "BASE TABLE");
-    test:assertEquals((<sql:ColumnDefinition[]>'table.columns).length(), 8);
+    
+    string tableCol = (<sql:ColumnDefinition[]>'table.columns).toString();
+    boolean columnCheck = tableCol.includes("EMPLOYEENUMBER") && tableCol.includes("LASTNAME") && 
+                         tableCol.includes("FIRSTNAME") && tableCol.includes("EXTENSION") && 
+                         tableCol.includes("EMAIL") && tableCol.includes("OFFICECODE") && 
+                         tableCol.includes("REPORTSTO") && tableCol.includes("JOBTITLE") && 
+                         tableCol.includes("FK_EmployeesOffice") && tableCol.includes("FK_EmployeesManager");
+
+    test:assertEquals(columnCheck, true);
+
+
 }
 
 @test:Config {
@@ -79,7 +96,7 @@ function testGetTableInfoNegative() returns error? {
     sql:TableDefinition|sql:Error 'table = client1->getTableInfo("employee", include = sql:NO_COLUMNS);
     check client1.close();
     if 'table is sql:Error {
-        test:assertEquals('table.message(), "Selected Table does not exist or the user does not have privilages of viewing the Table");
+        test:assertEquals('table.message(), "The selected table does not exist or the user does not have the required privilege level to view the table.");
     } else {
         test:assertFail("Expected result not received");
     }
@@ -92,14 +109,14 @@ function testListRoutines() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "metadataDB", 3306, (), ());
     string[] routineList = check client1->listRoutines();
     check client1.close();
-    test:assertEquals(routineList, ["getEmpsName", "getEmpsEmail"]);
+    test:assertEquals(routineList, ["getEmpsEmail", "getEmpsName"]);
 }
 
 @test:Config {
     groups: ["metadata"]
 }
 function testListRoutinesNegative() returns error? {
-    SchemaClient client1 = check new("localhost", "root", "password", "metadataDB1", 3306, (), ());
+    SchemaClient client1 = check new("localhost", "root", "password", "metadataEmptyDB", 3306, (), ());
     string[] routineList = check client1->listRoutines();
     check client1.close();
     test:assertEquals(routineList, []);
@@ -114,7 +131,10 @@ function testGetRoutineInfo() returns error? {
     check client1.close();
     test:assertEquals(routine.name, "getEmpsName");
     test:assertEquals(routine.'type, "PROCEDURE");
-    test:assertEquals((<sql:ParameterDefinition[]>routine.parameters).length(), 2);
+
+    string routineParams = (<sql:ParameterDefinition[]>routine.parameters).toString();
+    boolean paramCheck = routineParams.includes("EMPNUMBER") && routineParams.includes("FNAME");
+    test:assertEquals(paramCheck, true);
 }
 
 @test:Config {
@@ -125,7 +145,7 @@ function testGetRoutineInfoNegative() returns error? {
     sql:RoutineDefinition|sql:Error routine = client1->getRoutineInfo("getEmpsNames");
     check client1.close();
     if routine is sql:Error {
-        test:assertEquals(routine.message(), "Selected Routine does not exist or the user does not have privilages of viewing it");
+        test:assertEquals(routine.message(), "Selected routine does not exist in the database, or the user does not have required privilege level to view it.");
     } else {
         test:assertFail("Expected result not recieved");
     }

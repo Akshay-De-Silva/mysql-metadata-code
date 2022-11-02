@@ -138,7 +138,7 @@ isolated client class SchemaClient {
     # + name - The name of the routine
     # + return - An 'sql:RoutineDefinition' with the relevant routine information or an `sql:Error`
     isolated remote function getRoutineInfo(string name) returns sql:RoutineDefinition|sql:Error {
-        record {}|sql:Error routine = self.dbClient->queryRow(
+        sql:RoutineDefinition|sql:Error routine = self.dbClient->queryRow(
             `SELECT ROUTINE_TYPE, DATA_TYPE FROM INFORMATION_SCHEMA.ROUTINES 
              WHERE ROUTINE_NAME = ${name};`
         );
@@ -148,14 +148,13 @@ isolated client class SchemaClient {
         } else if routine is sql:Error {
             return routine;
         } else {
-            sql:RoutineDefinition|sql:Error routineError = self.getParameters(name, <sql:RoutineDefinition>routine);
-            sql:RoutineDefinition routineDef = <sql:RoutineDefinition>routine;
+            sql:RoutineDefinition|sql:Error routineError = self.getParameters(name, routine);
 
             if routineError is sql:RoutineDefinition {
-                routineDef = routineError;
+                routine = routineError;
             }
 
-            return routineDef;
+            return routine;
         }
     }
 
@@ -201,8 +200,10 @@ isolated client class SchemaClient {
         map<sql:CheckConstraint[]> checkConstMap = {};
 
         stream<record {}, sql:Error?> checkResults = self.dbClient->query(
-            `SELECT CONSTRAINT_NAME, CHECK_CLAUSE FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS 
-            WHERE CONSTRAINT_SCHEMA=${self.database};`
+            `SELECT CC.CONSTRAINT_NAME, CC.CHECK_CLAUSE, CCU.COLUMN_NAME
+            FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS CC
+            JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE AS CCU ON CC.CONSTRAINT_NAME = CCU.CONSTRAINT_NAME
+            WHERE CC.CONSTRAINT_SCHEMA = ${self.database} AND CCU.TABLE_NAME = ${tableName}`
         );
         do {
             check from record {} result in checkResults
@@ -335,7 +336,7 @@ public function main() returns sql:Error?|error {                               
     io:println(tableNames);
     io:println("");
 
-    sql:TableDefinition|sql:Error tableDef = client1->getTableInfo("employees", include = sql:COLUMNS_ONLY);
+    sql:TableDefinition|sql:Error tableDef = client1->getTableInfo("employees", include = sql:COLUMNS_WITH_CONSTRAINTS);
     io:println("Table Definition:\n");
     io:println(tableDef);
     io:println("");
