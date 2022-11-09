@@ -24,7 +24,7 @@ function testListTables() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "metadataDB", 3306, (), ());
     string[] tableList = check client1->listTables();
     check client1.close();
-    test:assertEquals(tableList, ["employees", "offices"]);
+    test:assertEquals(tableList, ["EMPLOYEES", "OFFICES"]);
 }
 
 @test:Config {
@@ -42,9 +42,9 @@ function testListTablesNegative() returns error? {
 }
 function testGetTableInfoNoColumns() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "metadataDB", 3306, (), ());
-    sql:TableDefinition 'table = check client1->getTableInfo("employees", include = sql:NO_COLUMNS);
+    TableDefinition 'table = check client1->getTableInfo("EMPLOYEES", include = sql:NO_COLUMNS);
     check client1.close();
-    test:assertEquals('table, {"name":"employees", "type":"BASE TABLE"});
+    test:assertEquals('table, {"name":"EMPLOYEES", "type":"BASE TABLE"});
 }
 
 @test:Config {
@@ -52,18 +52,63 @@ function testGetTableInfoNoColumns() returns error? {
 }
 function testGetTableInfoColumnsOnly() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "metadataDB", 3306, (), ());
-    sql:TableDefinition 'table = check client1->getTableInfo("employees", include = sql:COLUMNS_ONLY);
+    TableDefinition 'table = check client1->getTableInfo("EMPLOYEES", include = sql:COLUMNS_ONLY);
     check client1.close();
-    test:assertEquals('table.name, "employees");
-    test:assertEquals('table.'type, "BASE TABLE");
 
-    string tableCol = (<sql:ColumnDefinition[]>'table.columns).toString();
-    boolean columnCheck = tableCol.includes("EMPLOYEENUMBER") && tableCol.includes("LASTNAME") && 
-                         tableCol.includes("FIRSTNAME") && tableCol.includes("EXTENSION") && 
-                         tableCol.includes("EMAIL") && tableCol.includes("OFFICECODE") && 
-                         tableCol.includes("REPORTSTO") && tableCol.includes("JOBTITLE");
-
-    test:assertEquals(columnCheck, true);
+    test:assertEquals('table, 
+    {
+    "name":"EMPLOYEES",
+    "type":"BASE TABLE",
+    "columns":[
+        {
+            "name":"EMPLOYEENUMBER",
+            "type":"int","defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"LASTNAME",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"FIRSTNAME",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"EXTENSION",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"EMAIL",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"OFFICECODE",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"REPORTSTO",
+            "type":"int",
+            "defaultValue":null,
+            "nullable":true
+        },
+        {
+            "name":"JOBTITLE",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        }
+        ]
+    });
 }
 
 @test:Config {
@@ -71,21 +116,87 @@ function testGetTableInfoColumnsOnly() returns error? {
 }
 function testGetTableInfoColumnsWithConstraints() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "metadataDB", 3306, (), ());
-    sql:TableDefinition 'table = check client1->getTableInfo("employees", include = sql:COLUMNS_WITH_CONSTRAINTS);
+    TableDefinition 'table = check client1->getTableInfo("EMPLOYEES", include = sql:COLUMNS_WITH_CONSTRAINTS);
     check client1.close();
-    test:assertEquals('table.name, "employees");
-    test:assertEquals('table.'type, "BASE TABLE");
-    
-    string tableCol = (<sql:ColumnDefinition[]>'table.columns).toString();
-    boolean columnCheck = tableCol.includes("EMPLOYEENUMBER") && tableCol.includes("LASTNAME") && 
-                         tableCol.includes("FIRSTNAME") && tableCol.includes("EXTENSION") && 
-                         tableCol.includes("EMAIL") && tableCol.includes("OFFICECODE") && 
-                         tableCol.includes("REPORTSTO") && tableCol.includes("JOBTITLE") && 
-                         tableCol.includes("FK_EmployeesOffice") && tableCol.includes("FK_EmployeesManager");
 
-    test:assertEquals(columnCheck, true);
-
-
+    test:assertEquals('table, 
+    {
+    "checkConstraints":[
+        {
+            "name":"CHK_EmpNums",
+            "clause":"((`EMPLOYEENUMBER` > 0) and (`REPORTSTO` > 0))"
+        }
+    ],
+    "name":"EMPLOYEES",
+    "type":"BASE TABLE",
+    "columns":[
+        {
+            "name":"EMPLOYEENUMBER",
+            "type":"int","defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"LASTNAME",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"FIRSTNAME",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"EXTENSION",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"EMAIL",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        },
+        {
+            "name":"OFFICECODE",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false,
+            "referentialConstraints":[
+                {
+                    "name":"FK_EmployeesOffice",
+                    "tableName":"EMPLOYEES",
+                    "columnName":"OFFICECODE",
+                    "updateRule":"NO ACTION",
+                    "deleteRule":"NO ACTION"
+                }
+            ]
+        },
+        {
+            "name":"REPORTSTO",
+            "type":"int",
+            "defaultValue":null,
+            "nullable":true,
+            "referentialConstraints":[
+                {
+                    "name":"FK_EmployeesManager",
+                    "tableName":"EMPLOYEES",
+                    "columnName":"REPORTSTO",
+                    "updateRule":"NO ACTION",
+                    "deleteRule":"NO ACTION"
+                }
+            ]
+        },
+        {
+            "name":"JOBTITLE",
+            "type":"varchar",
+            "defaultValue":null,
+            "nullable":false
+        }
+        ]
+    });
 }
 
 @test:Config {
@@ -93,7 +204,7 @@ function testGetTableInfoColumnsWithConstraints() returns error? {
 }
 function testGetTableInfoNegative() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "metadataDB", 3306, (), ());
-    sql:TableDefinition|sql:Error 'table = client1->getTableInfo("employee", include = sql:NO_COLUMNS);
+    TableDefinition|sql:Error 'table = client1->getTableInfo("EMPLOYEE", include = sql:NO_COLUMNS);
     check client1.close();
     if 'table is sql:Error {
         test:assertEquals('table.message(), "The selected table does not exist or the user does not have the required privilege level to view the table.");

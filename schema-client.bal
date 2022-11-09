@@ -25,6 +25,11 @@ configurable string HOST = ?;
 configurable int PORT = ?;
 configurable string DATABASE = ?;
 
+public type TableDefinition record {
+    *sql:TableDefinition;
+    sql:CheckConstraint[] checkConstraints?;
+};
+
 # Represents an SQL metadata client.
 isolated client class SchemaClient {
     private final mysql:Client dbClient;        //DELETE MYSQL
@@ -74,8 +79,8 @@ isolated client class SchemaClient {
     #             related information.
     #             If `COLUMNS_WITH_CONSTRAINTS` is provided, then columar information along with constraint related
     #             information will be retrieved
-    # + return - An 'sql:TableDefinition' with the relevant table information or an `sql:Error`
-    isolated remote function getTableInfo(string tableName, sql:ColumnRetrievalOptions include = sql:COLUMNS_ONLY) returns sql:TableDefinition|sql:Error {
+    # + return - An 'TableDefinition' with the relevant table information or an `sql:Error`
+    isolated remote function getTableInfo(string tableName, sql:ColumnRetrievalOptions include = sql:COLUMNS_ONLY) returns TableDefinition|sql:Error {
         record {}|sql:Error 'table = self.dbClient->queryRow(
             `SELECT TABLE_TYPE FROM INFORMATION_SCHEMA.TABLES 
              WHERE (TABLE_SCHEMA=${self.database} AND TABLE_NAME = ${tableName});`
@@ -86,22 +91,22 @@ isolated client class SchemaClient {
         } else if 'table is sql:Error {
             return 'table;
         } else {
-            sql:TableDefinition tableDef = {
+            TableDefinition tableDef = {
                 name: tableName,
                 'type: <sql:TableType>'table["TABLE_TYPE"]
             };
 
             if !(include == sql:NO_COLUMNS) {
-                sql:TableDefinition|sql:Error tableDefError = self.getColumns(tableName, tableDef);
+                TableDefinition|sql:Error tableDefError = self.getColumns(tableName, tableDef);
         
-                if tableDefError is sql:TableDefinition {
+                if tableDefError is TableDefinition {
                     tableDef = tableDefError;
                 }
 
                 if include == sql:COLUMNS_WITH_CONSTRAINTS {
                     tableDefError = self.getConstraints(tableName, tableDef);
 
-                    if tableDefError is sql:TableDefinition {
+                    if tableDefError is TableDefinition {
                         tableDef = tableDefError;
                     }
                 }    
@@ -162,8 +167,8 @@ isolated client class SchemaClient {
     #
     # + tableName - The name of the table
     # + tableDef - The table definition created in getTableInfo()
-    # + return - An 'sql:TableDefinition' now including the column information or an `sql:Error`
-    isolated function getColumns(string tableName, sql:TableDefinition tableDef) returns sql:TableDefinition|sql:Error {
+    # + return - An 'TableDefinition' now including the column information or an `sql:Error`
+    isolated function getColumns(string tableName, TableDefinition tableDef) returns TableDefinition|sql:Error {
         sql:ColumnDefinition[] columns = [];
         stream<record {}, sql:Error?> colResults = self.dbClient->query(
             `SELECT COLUMN_NAME, DATA_TYPE, COLUMN_DEFAULT, IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS 
@@ -195,15 +200,16 @@ isolated client class SchemaClient {
     #
     # + tableName - The name of the table
     # + tableDef - The table definition created in getTableInfo()
-    # + return - An 'sql:TableDefinition' now including the constraint information or an `sql:Error`
-    isolated function getConstraints(string tableName, sql:TableDefinition tableDef) returns sql:TableDefinition|sql:Error {
-        map<sql:CheckConstraint[]> checkConstMap = {};
+    # + return - An 'TableDefinition' now including the constraint information or an `sql:Error`
+    isolated function getConstraints(string tableName, TableDefinition tableDef) returns TableDefinition|sql:Error {
+        sql:CheckConstraint[] checkConstList =  [];
 
         stream<record {}, sql:Error?> checkResults = self.dbClient->query(
-            `SELECT CC.CONSTRAINT_NAME, CC.CHECK_CLAUSE, CCU.COLUMN_NAME
-            FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS CC
-            JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE AS CCU ON CC.CONSTRAINT_NAME = CCU.CONSTRAINT_NAME
-            WHERE CC.CONSTRAINT_SCHEMA = ${self.database} AND CCU.TABLE_NAME = ${tableName}`
+            `SELECT DISTINCT CC.CONSTRAINT_NAME, CC.CHECK_CLAUSE 
+            FROM INFORMATION_SCHEMA.CHECK_CONSTRAINTS AS CC 
+            JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS AS TC 
+            ON CC.CONSTRAINT_SCHEMA = TC.CONSTRAINT_SCHEMA 
+            WHERE CC.CONSTRAINT_SCHEMA=${self.database} AND TC.TABLE_NAME=${tableName};`
         );
         do {
             check from record {} result in checkResults
@@ -212,26 +218,15 @@ isolated client class SchemaClient {
                         name: <string>result["CONSTRAINT_NAME"],
                         clause: <string>result["CHECK_CLAUSE"]
                     };
-
-                    string colName = <string>result["COLUMN_NAME"];
-                    if checkConstMap[colName] is () {
-                        checkConstMap[colName] = [];
-                    }
-                    checkConstMap.get(colName).push('check);
+                    checkConstList.push('check);
                 };
         } on fail error e {
             return error sql:Error(string `Error while reading check constraints in the ${self.database} database.`, cause = e);
         }
 
-        check checkResults.close();
+        check checkResults.close();        
 
-        _ = checkpanic from sql:ColumnDefinition col in <sql:ColumnDefinition[]>tableDef.columns
-            do {
-                sql:CheckConstraint[]? checkConst = checkConstMap[col.name];
-                if checkConst is sql:CheckConstraint[] && checkConst.length() != 0 {
-                    col.checkConstraints = checkConst;
-                }
-            };
+        tableDef.checkConstraints = checkConstList;
 
         map<sql:ReferentialConstraint[]> refConstMap = {};
 
@@ -336,7 +331,7 @@ public function main() returns sql:Error?|error {                               
     io:println(tableNames);
     io:println("");
 
-    sql:TableDefinition|sql:Error tableDef = client1->getTableInfo("employees", include = sql:COLUMNS_WITH_CONSTRAINTS);
+    TableDefinition|sql:Error tableDef = client1->getTableInfo("EMPLOYEES", include = sql:COLUMNS_WITH_CONSTRAINTS);
     io:println("Table Definition:\n");
     io:println(tableDef);
     io:println("");
