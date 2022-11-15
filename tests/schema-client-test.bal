@@ -21,7 +21,7 @@ import ballerina/sql;
     groups: ["metadata"]
 }
 function testListTables() returns error? {
-    SchemaClient client1 = check new("localhost", "root", "password", "metadataDB", 3306, (), ());
+    SchemaClient client1 = check new("localhost", "root", "password", "metadataDB", 3306, (), ());          //chaned in the main repo version
     string[] tableList = check client1->listTables();
     check client1.close();
     test:assertEquals(tableList, ["EMPLOYEES", "OFFICES"]);
@@ -44,7 +44,7 @@ function testGetTableInfoNoColumns() returns error? {
     SchemaClient client1 = check new("localhost", "root", "password", "metadataDB", 3306, (), ());
     TableDefinition 'table = check client1->getTableInfo("EMPLOYEES", include = sql:NO_COLUMNS);
     check client1.close();
-    test:assertEquals('table, {"name":"EMPLOYEES", "type":"BASE TABLE"});
+    test:assertEquals('table, {"name": "EMPLOYEES", "type": "BASE TABLE"});
 }
 
 @test:Config {
@@ -76,7 +76,7 @@ function testGetTableInfoColumnsWithConstraints() returns error? {
 
     test:assertEquals('table.name, "EMPLOYEES");
     test:assertEquals('table.'type, "BASE TABLE");
-    test:assertEquals('table.checkConstraints, [{"name":"CHK_EmpNums","clause":"((`EMPLOYEENUMBER` > 0) and (`REPORTSTO` > 0))"}]);
+    test:assertEquals('table.checkConstraints, [{"name": "CHK_EmpNums","clause": "((`EMPLOYEENUMBER` > 0) and (`REPORTSTO` > 0))"}]);
 
     string tableCol = (<sql:ColumnDefinition[]>'table.columns).toString();
     boolean columnCheck = tableCol.includes("EMPLOYEENUMBER") && tableCol.includes("LASTNAME") && 
